@@ -33,7 +33,7 @@
         "order_book_top": 1
     },
     "exchange": {
-        "name": "binance",
+        "name": "bybit",
         "key": "",
         "secret": "",
         "ccxt_config": {},
@@ -41,7 +41,6 @@
         "pair_whitelist": [
             "BTC/USDT",
             "ETH/USDT",
-            "BNB/USDT",
             "SOL/USDT",
             "XRP/USDT",
             "ADA/USDT",
