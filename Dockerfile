@@ -14,6 +14,7 @@ COPY dashboard/ /bot/dashboard/
 COPY config.json /bot/config.json
 COPY start.sh /bot/start.sh
 COPY inject_dashboard.py /bot/inject_dashboard.py
+COPY patch_db_pool.py /bot/patch_db_pool.py
 
 RUN chmod +x /bot/start.sh && \
     mkdir -p /bot/user_data/data /bot/user_data/logs

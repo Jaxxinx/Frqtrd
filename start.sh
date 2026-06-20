@@ -5,7 +5,7 @@ echo "=== Freqtrade HF Space ==="
 
 # Database: Supabase or SQLite
 if [ -n "$SUPABASE_DB_PASSWORD" ]; then
-    DB_URL="postgresql://postgres.mbhfuucletknrkumivhc:${SUPABASE_DB_PASSWORD}@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres?pool_size=2&max_overflow=3&pool_pre_ping=true&pool_recycle=300"
+    DB_URL="postgresql://postgres.mbhfuucletknrkumivhc:${SUPABASE_DB_PASSWORD}@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
     echo "DB: Supabase PostgreSQL"
 else
     DB_URL="sqlite:////bot/user_data/tradesv3.dryrun.sqlite"
@@ -33,8 +33,25 @@ print(f'Strategy: {strategy}')
 STRATEGY=$(python3 -c "import json; print(json.load(open('/bot/user_data/config-runtime.json'))['strategy'])")
 
 echo "=== Starting freqtrade ==="
-exec freqtrade trade \
-    --config /bot/user_data/config-runtime.json \
+# Apply DB pool patch for Supabase
+if [ -n "$SUPABASE_DB_PASSWORD" ]; then
+    SITE_PACKAGES=$(python3 -c "import freqtrade; import os; print(os.path.dirname(os.path.dirname(freqtrade.__file__)))")
+    cp /bot/patch_db_pool.py "$SITE_PACKAGES/patch_db_pool.py"
+    export PYTHONSTARTUP="$SITE_PACKAGES/patch_db_pool.py"
+    # Also use -c to preload the patch
+    exec python3 -c "
+import patch_db_pool
+from freqtrade.main import main
+import sys
+sys.exit(main())
+" trade --config /bot/user_data/config-runtime.json \
     --strategy "$STRATEGY" \
     --userdir /bot/user_data \
     --strategy-path /bot/user_data/strategies
+else
+    exec freqtrade trade \
+        --config /bot/user_data/config-runtime.json \
+        --strategy "$STRATEGY" \
+        --userdir /bot/user_data \
+        --strategy-path /bot/user_data/strategies
+fi
