@@ -1,0 +1,29 @@
+name: Keep HF Space Alive
+
+on:
+  schedule:
+    - cron: '0 */12 * * *'
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart HF Space
+        run: |
+          curl -s -X POST \
+            "https://huggingface.co/api/spaces/${{ secrets.HF_SPACE_NAME }}/restart" \
+            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}"
+          echo "Space restart triggered at $(date)"
+
+      - name: Ping Space API
+        run: |
+          sleep 30
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://${{ secrets.HF_SPACE_NAME }}.hf.space/api/v1/ping" || echo "000")
+          echo "Space status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "Space is running"
+          else
+            echo "Space may still be starting up"
+          fi
