@@ -4,8 +4,8 @@ set -e
 echo "=== Freqtrade HF Space ==="
 
 # Database: Supabase or SQLite
-if [ -n "$SUPABASE_DB_HOST" ]; then
-    DB_URL="postgresql://postgres.${SUPABASE_PROJECT_REF}:${SUPABASE_DB_PASSWORD}@${SUPABASE_DB_HOST}:6543/postgres"
+if [ -n "$SUPABASE_DB_PASSWORD" ]; then
+    DB_URL="postgresql://postgres.mbhfuucletknrkumivhc:${SUPABASE_DB_PASSWORD}@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
     echo "DB: Supabase PostgreSQL"
 else
     DB_URL="sqlite:////bot/user_data/tradesv3.dryrun.sqlite"
