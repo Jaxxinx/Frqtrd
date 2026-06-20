@@ -13,23 +13,12 @@ COPY exchange/ /bot/user_data/exchange/
 COPY dashboard/ /bot/dashboard/
 COPY config.json /bot/config.json
 COPY start.sh /bot/start.sh
+COPY inject_dashboard.py /bot/inject_dashboard.py
 
 RUN chmod +x /bot/start.sh && \
     mkdir -p /bot/user_data/data /bot/user_data/logs
 
-# Inject custom dashboard route into freqtrade
-RUN python3 -c " \
-import freqtrade.rpc.api_server.web_ui as w; \
-src = open(w.__file__).read(); \
-if '/custom' not in src: \
-    import shutil; \
-    shutil.copy('/bot/dashboard/custom_dashboard.html', w.__file__.replace('web_ui.py','ui/custom_dashboard.html')); \
-    inject = '''\n\n@router_ui.get(\"/custom\")\nasync def custom_dashboard():\n    return FileResponse(str(Path(__file__).parent / \"ui/custom_dashboard.html\"))\n'''; \
-    open(w.__file__,'w').write(src.replace('@router_ui.get(\"/{rest_of_path:path}\")', inject + '\n\n@router_ui.get(\"/{rest_of_path:path}\")')); \
-    print('Custom dashboard injected'); \
-else: \
-    print('Custom dashboard already present') \
-"
+RUN python3 /bot/inject_dashboard.py
 
 EXPOSE 7860
 ENV PYTHONUNBUFFERED=1
