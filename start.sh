@@ -20,6 +20,7 @@ with open('/bot/config.json') as f:
 cfg['db_url'] = '${DB_URL}'
 cfg['exchange']['key'] = os.environ.get('EXCHANGE_KEY', '')
 cfg['exchange']['secret'] = os.environ.get('EXCHANGE_SECRET', '')
+cfg['exchange']['passphrase'] = os.environ.get('EXCHANGE_PASSPHRASE', '')
 cfg['api_server']['username'] = os.environ.get('API_USERNAME', 'freqtrader')
 cfg['api_server']['password'] = os.environ.get('API_PASSWORD', 'changeme')
 cfg['api_server']['jwt_secret_key'] = os.environ.get('JWT_SECRET', 'changeme-somethingRandomSomethingRandom12345678')
