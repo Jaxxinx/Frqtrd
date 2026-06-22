@@ -5,7 +5,7 @@
     "dry_run": true,
     "dry_run_wallet": 10000,
     "tradable_balance_ratio": 0.99,
-    "fiat_display_currency": "USD",
+    "fiat_display_currency": "",
     "timeframe": "1h",
     "strategy": "MultiOffsetLamboV0",
     "trading_mode": "spot",
