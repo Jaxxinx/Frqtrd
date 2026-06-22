@@ -37,6 +37,7 @@
         "key": "",
         "secret": "",
         "passphrase": "",
+        "enable_ws": false,
         "ccxt_config": {
             "enableRateLimit": true,
             "rateLimit": 200
