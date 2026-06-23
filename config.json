@@ -55,7 +55,13 @@
             "DOGE/USDT",
             "AVAX/USDT",
             "DOT/USDT",
-            "LINK/USDT"
+            "LINK/USDT",
+            "BNB/USDT",
+            "LTC/USDT",
+            "ATOM/USDT",
+            "SHIB/USDT",
+            "PEPE/USDT",
+            "FIL/USDT"
         ],
         "pair_blacklist": []
     },
