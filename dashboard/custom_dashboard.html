@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Freqtrade Dashboard</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -164,6 +165,12 @@ tr:hover td { background: var(--surface2); }
   .container { padding: 1rem; }
   th, td { padding: 0.4rem 0.6rem; }
 }
+.graph-tooltip {
+  position: absolute; background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 0.5rem 0.75rem; font-size: 0.75rem; pointer-events: none;
+  z-index: 10; max-width: 220px; line-height: 1.4;
+}
 </style>
 </head>
 <body>
@@ -252,6 +259,19 @@ tr:hover td { background: var(--surface2); }
     <div class="chart-box">
       <div class="chart-value" id="walletHistValue">--</div>
       <svg id="walletHistChart" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
+
+  <!-- Trade Graph View -->
+  <div class="section">
+    <div class="section-title">Trade Graph
+      <span style="font-weight:400;text-transform:none;font-size:0.7rem;color:var(--text2);margin-left:0.5rem">
+        — force-directed, node size = trades, color = profit/loss
+      </span>
+    </div>
+    <div class="chart-box" style="padding:0.5rem">
+      <svg id="tradeGraph" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet" style="width:100%;height:500px"></svg>
+      <div id="graphTooltip" class="graph-tooltip" style="display:none"></div>
     </div>
   </div>
 
@@ -803,6 +823,158 @@ function drawBarChart(svgId, bars) {
   svg.innerHTML = grid + barSvg + xlabels;
 }
 
+// ── Trade Force Graph ──
+async function loadGraph() {
+  const svg = document.getElementById('tradeGraph');
+  if (!svg) return;
+  try {
+    const data = await api('GET', '/trades?limit=500&offset=0');
+    const trades = data.trades || [];
+
+    if (trades.length === 0) {
+      svg.innerHTML = '<text x="400" y="250" text-anchor="middle" fill="#8888a0" font-size="14">No trade data yet</text>';
+      return;
+    }
+
+    // Build pair nodes + edges (co-occurrence within same hour window)
+    const pairMap = {};
+    const pairs = [];
+    const edges = [];
+
+    trades.forEach(t => {
+      if (!t.pair) return;
+      if (!pairMap[t.pair]) {
+        pairMap[t.pair] = { id: t.pair, trades: [], profit: 0, wins: 0, losses: 0, stake: 0 };
+        pairs.push(pairMap[t.pair]);
+      }
+      const p = pairMap[t.pair];
+      p.trades.push(t);
+      p.profit += t.profit_abs || 0;
+      p.stake += t.stake_amount || 0;
+      if ((t.profit_abs || 0) > 0) p.wins++;
+      else p.losses++;
+    });
+
+    // Edge: weight = number of times two pairs traded within 1h of each other
+    const edgeWeight = {};
+    const sorted = trades.filter(t => t.close_date).sort((a, b) => new Date(a.close_date) - new Date(b.close_date));
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 1; j < Math.min(i + 5, sorted.length); j++) {
+        const t1 = new Date(sorted[i].close_date).getTime();
+        const t2 = new Date(sorted[j].close_date).getTime();
+        if (t2 - t1 < 3600000 && sorted[i].pair !== sorted[j].pair) {
+          const key = [sorted[i].pair, sorted[j].pair].sort().join('||');
+          edgeWeight[key] = (edgeWeight[key] || 0) + 1;
+        }
+      }
+    }
+    Object.entries(edgeWeight).forEach(([k, w]) => {
+      const [s, t] = k.split('||');
+      if (pairMap[s] && pairMap[t]) edges.push({ source: s, target: t, weight: w });
+    });
+
+    if (pairs.length === 0) {
+      svg.innerHTML = '<text x="400" y="250" text-anchor="middle" fill="#8888a0" font-size="14">No trade data yet</text>';
+      return;
+    }
+
+    // Clear previous
+    svg.innerHTML = '';
+
+    // Scales
+    const maxTrades = Math.max(...pairs.map(p => p.trades.length));
+    const minProfit = Math.min(...pairs.map(p => p.profit));
+    const maxProfit = Math.max(...pairs.map(p => p.profit));
+    const profitRange = Math.max(Math.abs(minProfit), Math.abs(maxProfit)) || 1;
+    const rScale = d3.scaleSqrt().domain([1, Math.max(maxTrades, 2)]).range([8, 40]);
+    const colorScale = d3.scaleLinear().domain([-profitRange, 0, profitRange]).range(['#ef4444', '#1a1a24', '#22c55e']);
+
+    // D3 force simulation
+    const width = 800, height = 500;
+    const g = d3.select(svg)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+      .style('width', '100%')
+      .style('height', '500px');
+
+    const simulation = d3.forceSimulation(pairs)
+      .force('link', d3.forceLink(edges).id(d => d.id).distance(80).strength(d => d.weight * 0.5))
+      .force('charge', d3.forceManyBody().strength(-200))
+      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('collision', d3.forceCollide().radius(d => rScale(d.trades.length) + 5));
+
+    // Edges
+    const link = g.append('g')
+      .selectAll('line')
+      .data(edges)
+      .join('line')
+      .attr('stroke', '#22222e')
+      .attr('stroke-width', d => Math.max(0.5, Math.min(3, d.weight)))
+      .attr('stroke-opacity', 0.5);
+
+    // Nodes
+    const node = g.append('g')
+      .selectAll('circle')
+      .data(pairs)
+      .join('circle')
+      .attr('r', d => rScale(d.trades.length))
+      .attr('fill', d => colorScale(d.profit))
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 1.5)
+      .attr('stroke-opacity', 0.3)
+      .style('cursor', 'pointer')
+      .on('mouseover', (event, d) => {
+        const tt = document.getElementById('graphTooltip');
+        tt.style.display = 'block';
+        tt.style.left = (event.offsetX + 15) + 'px';
+        tt.style.top = (event.offsetY - 10) + 'px';
+        tt.innerHTML = `<strong>${d.id}</strong><br>
+          Trades: ${d.trades.length}<br>
+          Profit: <span style="color:${d.profit >= 0 ? '#22c55e' : '#ef4444'}">${d.profit >= 0 ? '+' : ''}${d.profit.toFixed(2)} USDT</span><br>
+          Win: ${d.wins} / Loss: ${d.losses}<br>
+          Stake: ${d.stake.toFixed(2)} USDT`;
+        d3.select(event.target).attr('stroke-opacity', 1).attr('stroke-width', 2.5);
+      })
+      .on('mouseout', (event) => {
+        document.getElementById('graphTooltip').style.display = 'none';
+        d3.select(event.target).attr('stroke-opacity', 0.3).attr('stroke-width', 1.5);
+      })
+      .call(d3.drag()
+        .on('start', (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
+        .on('end', (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; })
+      );
+
+    // Labels
+    const label = g.append('g')
+      .selectAll('text')
+      .data(pairs)
+      .join('text')
+      .text(d => d.id.split('/')[0])
+      .attr('font-size', d => Math.max(8, Math.min(13, rScale(d.trades.length) * 0.4)))
+      .attr('text-anchor', 'middle')
+      .attr('dy', '0.35em')
+      .attr('fill', '#e4e4e8')
+      .attr('pointer-events', 'none');
+
+    // Tick
+    simulation.on('tick', () => {
+      link
+        .attr('x1', d => d.source.x)
+        .attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x)
+        .attr('y2', d => d.target.y);
+      node
+        .attr('cx', d => d.x)
+        .attr('cy', d => d.y);
+      label
+        .attr('x', d => d.x)
+        .attr('y', d => d.y);
+    });
+  } catch(e) {
+    // Silently fail — graph is bonus
+  }
+}
+
 // ── Clock & Refresh ──
 function updateClock() {
   document.getElementById('clockTime').textContent = new Date().toLocaleTimeString();
@@ -828,7 +1000,8 @@ async function refreshAll() {
     loadDaily(),
     loadPerformance(),
     loadTradeHistory(),
-    loadLogs()
+    loadLogs(),
+    loadGraph()
   ]);
 }
 
