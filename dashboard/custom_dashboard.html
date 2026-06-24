@@ -233,6 +233,11 @@ tr:hover td { background: var(--surface2); }
       <div class="card-value" id="closedCount"><div class="skeleton"></div></div>
       <div class="card-sub" id="avgProfit"></div>
     </div>
+    <div class="card">
+      <div class="card-label">Bot Uptime</div>
+      <div class="card-value" id="uptimeValue" style="font-size:1rem"><div class="skeleton" style="height:1rem"></div></div>
+      <div class="card-sub" id="uptimeStarted"></div>
+    </div>
   </div>
 
   <!-- Chart 1: Cumulative Profit -->
@@ -823,7 +828,56 @@ function drawBarChart(svgId, bars) {
   svg.innerHTML = grid + barSvg + xlabels;
 }
 
-// ── Trade Force Graph ──
+let _botStartTime = null;
+
+// ── Bot Uptime ──
+async function loadUptime() {
+  try {
+    if (!_botStartTime) {
+      // Fetch logs to find first heartbeat
+      const data = await api('GET', '/logs?limit=200');
+      const logs = data.logs || [];
+      for (const l of logs) {
+        const ts = l[0] || '';
+        const msg = l[4] || '';
+        if (msg.includes('Bot heartbeat') || msg.includes('Starting worker') || msg.includes('Application startup complete')) {
+          _botStartTime = new Date(ts);
+          break;
+        }
+      }
+      if (!_botStartTime) {
+        // Fallback: use oldest log timestamp
+        for (const l of logs) {
+          const ts = l[0] || '';
+          if (ts) { _botStartTime = new Date(ts); break; }
+        }
+      }
+    }
+
+    if (!_botStartTime) {
+      document.getElementById('uptimeValue').textContent = '--';
+      return;
+    }
+
+    const elapsed = Date.now() - _botStartTime.getTime();
+    const secs = Math.floor(elapsed / 1000);
+    const mins = Math.floor(secs / 60);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
+
+    let display;
+    if (days > 0) display = `${days}d ${hours % 24}h ${mins % 60}m`;
+    else if (hours > 0) display = `${hours}h ${mins % 60}m ${secs % 60}s`;
+    else if (mins > 0) display = `${mins}m ${secs % 60}s`;
+    else display = `${secs}s`;
+
+    document.getElementById('uptimeValue').textContent = display;
+    document.getElementById('uptimeStarted').textContent =
+      'since ' + _botStartTime.toLocaleString(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+  } catch(e) {}
+}
+
+// ── Force Graph ──
 async function loadGraph() {
   const svg = document.getElementById('tradeGraph');
   if (!svg) return;
@@ -1001,7 +1055,8 @@ async function refreshAll() {
     loadPerformance(),
     loadTradeHistory(),
     loadLogs(),
-    loadGraph()
+    loadGraph(),
+    loadUptime()
   ]);
 }
 
@@ -1010,6 +1065,7 @@ function startDashboard() {
   refreshInterval = setInterval(refreshAll, 10000);
   setInterval(updateClock, 1000);
   setInterval(updateRefreshTimer, 1000);
+  setInterval(loadUptime, 1000);
   updateClock();
   updateRefreshTimer();
 }
