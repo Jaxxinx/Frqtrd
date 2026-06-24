@@ -81,7 +81,7 @@
         "jwt_secret_key": "changeme-somethingRandomSomethingRandom12345678",
         "CORS_origins": ["*"],
         "username": "freqtrader",
-        "password": "SuperSecurePassword"
+        "password": "12345"
     },
     "bot_name": "freqtrade-hf",
     "initial_state": "running",
